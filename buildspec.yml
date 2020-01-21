@@ -1,0 +1,13 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Compiling the PHP code...
+  post_build:
+    commands:
+      - echo Done building
+artifacts:
+  files:
+    - '**/*'

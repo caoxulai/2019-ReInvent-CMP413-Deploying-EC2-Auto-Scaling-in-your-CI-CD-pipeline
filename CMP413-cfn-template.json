@@ -1,0 +1,2003 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "This template demonstrates using the AWS CloudFormation bootstrap scripts to install the packages and files necessary to deploy the Apache web server and PHP at instance launch time using a CI/CD pipeline.  Instances are launched within an Auto Scaling Group which scales dynamically using a Target Tracking Scaling Policy.",
+    "Parameters": {
+        "VpcId": {
+            "Type": "AWS::EC2::VPC::Id",
+            "Description": "VpcId of your existing Virtual Private Cloud (VPC)",
+            "ConstraintDescription": "must be the VPC Id of an existing Virtual Private Cloud."
+        },
+        "SubnetsForAutoscalingGroup": {
+            "Type": "List<AWS::EC2::Subnet::Id>",
+            "Description": "The list of Subnet ids in your Virtual Private Cloud (VPC), please select at least 2 subnets.",
+            "ConstraintDescription": "must be a list of at least two existing subnets associated with at least two different availability zones. They should be residing in the selected Virtual Private Cloud."
+        },
+        "SubnetForCloud9": {
+            "Description": "Subnet id will be used for Cloud9",
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "EC2KeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+        },
+        "TargetTrackingPolicyTargetValue": {
+            "Description": "Configure a target value to keep the average CPU Utilization (Percent) at for your Auto Scaling group",
+            "Default": "40",
+            "Type": "String"
+        },
+        "WebServerCapacity": {
+            "Default": "1",
+            "Description": "The initial number of WebServer instances (must be between 1 and 20 EC2 instances)",
+            "Type": "Number",
+            "MinValue": "1",
+            "MaxValue": "20",
+            "ConstraintDescription": "must be between 1 and 20 EC2 instances."
+        },
+        "MainBranchName": {
+            "Type": "String",
+            "Default": "master",
+            "Description": "Enter main branch name of your project repository. Default is master."
+        },
+        "InstanceType": {
+            "Description": "WebServer EC2 instance type",
+            "Type": "String",
+            "Default": "t2.micro",
+            "AllowedValues": [
+                "t1.micro",
+                "t2.nano",
+                "t2.micro",
+                "t2.small",
+                "t2.medium",
+                "t2.large",
+                "m1.small",
+                "m1.medium",
+                "m1.large",
+                "m1.xlarge",
+                "m2.xlarge",
+                "m2.2xlarge",
+                "m3.medium",
+                "m3.large",
+                "m3.xlarge",
+                "m3.2xlarge",
+                "m4.large",
+                "m4.xlarge",
+                "m4.2xlarge",
+                "c1.medium",
+                "c1.xlarge",
+                "c3.large",
+                "c3.xlarge",
+                "c3.2xlarge",
+                "c4.large",
+                "c4.xlarge",
+                "c4.2xlarge",
+                "g2.2xlarge",
+                "r3.large",
+                "r3.xlarge",
+                "r3.2xlarge",
+                "i2.xlarge",
+                "i2.2xlarge",
+                "d2.xlarge",
+                "d2.2xlarge"
+            ],
+            "ConstraintDescription": "must be a valid EC2 instance type."
+        }
+    },
+    "Mappings": {
+        "AWSInstanceType2Arch": {
+            "t1.micro": {
+                "Arch": "HVM64"
+            },
+            "t2.nano": {
+                "Arch": "HVM64"
+            },
+            "t2.micro": {
+                "Arch": "HVM64"
+            },
+            "t2.small": {
+                "Arch": "HVM64"
+            },
+            "t2.medium": {
+                "Arch": "HVM64"
+            },
+            "t2.large": {
+                "Arch": "HVM64"
+            },
+            "m1.small": {
+                "Arch": "HVM64"
+            },
+            "m1.medium": {
+                "Arch": "HVM64"
+            },
+            "m1.large": {
+                "Arch": "HVM64"
+            },
+            "m1.xlarge": {
+                "Arch": "HVM64"
+            },
+            "m2.xlarge": {
+                "Arch": "HVM64"
+            },
+            "m2.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "m2.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "m3.medium": {
+                "Arch": "HVM64"
+            },
+            "m3.large": {
+                "Arch": "HVM64"
+            },
+            "m3.xlarge": {
+                "Arch": "HVM64"
+            },
+            "m3.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "m4.large": {
+                "Arch": "HVM64"
+            },
+            "m4.xlarge": {
+                "Arch": "HVM64"
+            },
+            "m4.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "m4.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "m4.10xlarge": {
+                "Arch": "HVM64"
+            },
+            "c1.medium": {
+                "Arch": "HVM64"
+            },
+            "c1.xlarge": {
+                "Arch": "HVM64"
+            },
+            "c3.large": {
+                "Arch": "HVM64"
+            },
+            "c3.xlarge": {
+                "Arch": "HVM64"
+            },
+            "c3.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "c3.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "c3.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "c4.large": {
+                "Arch": "HVM64"
+            },
+            "c4.xlarge": {
+                "Arch": "HVM64"
+            },
+            "c4.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "c4.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "c4.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "g2.2xlarge": {
+                "Arch": "HVMG2"
+            },
+            "g2.8xlarge": {
+                "Arch": "HVMG2"
+            },
+            "r3.large": {
+                "Arch": "HVM64"
+            },
+            "r3.xlarge": {
+                "Arch": "HVM64"
+            },
+            "r3.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "r3.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "r3.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "i2.xlarge": {
+                "Arch": "HVM64"
+            },
+            "i2.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "i2.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "i2.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "d2.xlarge": {
+                "Arch": "HVM64"
+            },
+            "d2.2xlarge": {
+                "Arch": "HVM64"
+            },
+            "d2.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "d2.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "hi1.4xlarge": {
+                "Arch": "HVM64"
+            },
+            "hs1.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "cr1.8xlarge": {
+                "Arch": "HVM64"
+            },
+            "cc2.8xlarge": {
+                "Arch": "HVM64"
+            }
+        },
+        "AWSInstanceType2NATArch": {
+            "t1.micro": {
+                "Arch": "NATHVM64"
+            },
+            "t2.nano": {
+                "Arch": "NATHVM64"
+            },
+            "t2.micro": {
+                "Arch": "NATHVM64"
+            },
+            "t2.small": {
+                "Arch": "NATHVM64"
+            },
+            "t2.medium": {
+                "Arch": "NATHVM64"
+            },
+            "t2.large": {
+                "Arch": "NATHVM64"
+            },
+            "m1.small": {
+                "Arch": "NATHVM64"
+            },
+            "m1.medium": {
+                "Arch": "NATHVM64"
+            },
+            "m1.large": {
+                "Arch": "NATHVM64"
+            },
+            "m1.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m2.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m2.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m2.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m3.medium": {
+                "Arch": "NATHVM64"
+            },
+            "m3.large": {
+                "Arch": "NATHVM64"
+            },
+            "m3.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m3.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m4.large": {
+                "Arch": "NATHVM64"
+            },
+            "m4.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m4.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m4.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "m4.10xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c1.medium": {
+                "Arch": "NATHVM64"
+            },
+            "c1.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c3.large": {
+                "Arch": "NATHVM64"
+            },
+            "c3.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c3.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c3.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c3.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c4.large": {
+                "Arch": "NATHVM64"
+            },
+            "c4.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c4.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c4.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "c4.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "g2.2xlarge": {
+                "Arch": "NATHVMG2"
+            },
+            "g2.8xlarge": {
+                "Arch": "NATHVMG2"
+            },
+            "r3.large": {
+                "Arch": "NATHVM64"
+            },
+            "r3.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "r3.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "r3.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "r3.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "i2.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "i2.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "i2.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "i2.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "d2.xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "d2.2xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "d2.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "d2.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "hi1.4xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "hs1.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "cr1.8xlarge": {
+                "Arch": "NATHVM64"
+            },
+            "cc2.8xlarge": {
+                "Arch": "NATHVM64"
+            }
+        },
+        "AWSRegionArch2AMI": {
+            "us-east-1": {
+                "HVM64": "ami-0ff8a91507f77f867",
+                "HVMG2": "ami-0a584ac55a7631c0c"
+            },
+            "us-west-2": {
+                "HVM64": "ami-a0cfeed8",
+                "HVMG2": "ami-0e09505bc235aa82d"
+            },
+            "us-west-1": {
+                "HVM64": "ami-0bdb828fd58c52235",
+                "HVMG2": "ami-066ee5fd4a9ef77f1"
+            },
+            "eu-west-1": {
+                "HVM64": "ami-047bb4163c506cd98",
+                "HVMG2": "ami-0a7c483d527806435"
+            },
+            "eu-west-2": {
+                "HVM64": "ami-f976839e",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "eu-west-3": {
+                "HVM64": "ami-0ebc281c20e89ba4b",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "eu-central-1": {
+                "HVM64": "ami-0233214e13e500f77",
+                "HVMG2": "ami-06223d46a6d0661c7"
+            },
+            "ap-northeast-1": {
+                "HVM64": "ami-06cd52961ce9f0d85",
+                "HVMG2": "ami-053cdd503598e4a9d"
+            },
+            "ap-northeast-2": {
+                "HVM64": "ami-0a10b2721688ce9d2",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "ap-northeast-3": {
+                "HVM64": "ami-0d98120a9fb693f07",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "ap-southeast-1": {
+                "HVM64": "ami-08569b978cc4dfa10",
+                "HVMG2": "ami-0be9df32ae9f92309"
+            },
+            "ap-southeast-2": {
+                "HVM64": "ami-09b42976632b27e9b",
+                "HVMG2": "ami-0a9ce9fecc3d1daf8"
+            },
+            "ap-south-1": {
+                "HVM64": "ami-0912f71e06545ad88",
+                "HVMG2": "ami-097b15e89dbdcfcf4"
+            },
+            "us-east-2": {
+                "HVM64": "ami-0b59bfac6be064b78",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "ca-central-1": {
+                "HVM64": "ami-0b18956f",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "sa-east-1": {
+                "HVM64": "ami-07b14488da8ea02a0",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "cn-north-1": {
+                "HVM64": "ami-0a4eaf6c4454eda75",
+                "HVMG2": "NOT_SUPPORTED"
+            },
+            "cn-northwest-1": {
+                "HVM64": "ami-6b6a7d09",
+                "HVMG2": "NOT_SUPPORTED"
+            }
+        }
+    },
+    "Resources": {
+        "C9IDE": {
+            "Type": "AWS::Cloud9::EnvironmentEC2",
+            "Properties": {
+                "Name": {
+                    "Fn::Sub": "Cloud9-IDE"
+                },
+                "Description": {
+                    "Fn::Sub": "reInvent Cloud9 IDE"
+                },
+                "AutomaticStopTimeMinutes": 30,
+                "SubnetId": {
+                    "Ref": "SubnetForCloud9"
+                },
+                "InstanceType": "t2.micro",
+                "Repositories": [
+                    {
+                        "RepositoryUrl": {
+                            "Fn::Sub": "https://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/DemoWebApp"
+                        },
+                        "PathComponent": {
+                            "Fn::Sub": "codeCommit/DemoWebApp"
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "06a6059b-2eae-45ae-af98-82485e728951"
+                }
+            }
+        },
+        "InstanceRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "51fd3dc7-fca4-415b-bd90-6f70dec32cae"
+                }
+            }
+        },
+        "InstanceRolePolicies": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "InstanceRole",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "ec2:*",
+                                "codedeploy:*",
+                                "autoscaling:Describe*",
+                                "cloudformation:Describe*",
+                                "cloudformation:GetTemplate",
+                                "s3:Get*",
+                                "s3:List*"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "InstanceRole"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "deab916c-02b3-4e7c-aa23-e27364fec20a"
+                }
+            }
+        },
+        "InstanceRoleInstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "InstanceRole"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "7e84d283-7eae-4feb-9bb6-5b58d561b2d4"
+                }
+            }
+        },
+        "ApplicationLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Subnets": {
+                    "Ref": "SubnetsForAutoscalingGroup"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "PublicAccessibleSecurityGroup"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "ef1902eb-5eaf-4e74-8b92-e1c08c5139bc"
+                }
+            }
+        },
+        "ALBListener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "ALBTargetGroup"
+                        }
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "ApplicationLoadBalancer"
+                },
+                "Port": "80",
+                "Protocol": "HTTP"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "099c9417-dcb7-48a2-9c59-59339fd88400"
+                }
+            }
+        },
+        "ALBTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "HealthCheckIntervalSeconds": 10,
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 2,
+                "Port": 80,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": 5,
+                "VpcId": {
+                    "Ref": "VpcId"
+                },
+                "TargetGroupAttributes": [
+                    {
+                        "Key": "stickiness.enabled",
+                        "Value": "true"
+                    },
+                    {
+                        "Key": "stickiness.type",
+                        "Value": "lb_cookie"
+                    },
+                    {
+                        "Key": "stickiness.lb_cookie.duration_seconds",
+                        "Value": "30"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "9c0caff7-b227-4ab5-a951-7cda4ccc40aa"
+                }
+            }
+        },
+        "WebServerScalingPolicy": {
+            "Type": "AWS::AutoScaling::ScalingPolicy",
+            "Properties": {
+                "AutoScalingGroupName": {
+                    "Ref": "AutoScalingGroup"
+                },
+                "Cooldown": "120",
+                "EstimatedInstanceWarmup": "120",
+                "PolicyType": "TargetTrackingScaling",
+                "TargetTrackingConfiguration": {
+                    "PredefinedMetricSpecification": {
+                        "PredefinedMetricType": "ASGAverageCPUUtilization"
+                    },
+                    "TargetValue": {
+                        "Ref": "TargetTrackingPolicyTargetValue"
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "68222c2f-a30e-49e2-b922-7ffce26d6339"
+                }
+            }
+        },
+        "AutoScalingGroup": {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "VPCZoneIdentifier": {
+                    "Ref": "SubnetsForAutoscalingGroup"
+                },
+                "LaunchTemplate": {
+                    "LaunchTemplateId": {
+                        "Ref": "EC2LaunchTemplate"
+                    },
+                    "Version": "1"
+                },
+                "MinSize": "1",
+                "MaxSize": "20",
+                "DesiredCapacity": {
+                    "Ref": "WebServerCapacity"
+                },
+                "TargetGroupARNs": [
+                    {
+                        "Ref": "ALBTargetGroup"
+                    }
+                ]
+            },
+            "CreationPolicy": {
+                "ResourceSignal": {
+                    "Timeout": "PT5M",
+                    "Count": {
+                        "Ref": "WebServerCapacity"
+                    }
+                }
+            },
+            "UpdatePolicy": {
+                "AutoScalingRollingUpdate": {
+                    "MinInstancesInService": "1",
+                    "MaxBatchSize": "1",
+                    "PauseTime": "PT15M",
+                    "WaitOnResourceSignals": "true"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "4faed0ff-e61c-4bca-ac76-b21c573d0784"
+                }
+            }
+        },
+        "EC2LaunchTemplate": {
+            "Type": "AWS::EC2::LaunchTemplate",
+            "Metadata": {
+                "Comment1": "Configure the bootstrap helpers to install the Apache Web Server and PHP",
+                "DependsOn": [
+                    "InstanceRoleInstanceProfile"
+                ],
+                "AWS::CloudFormation::Init": {
+                    "config": {
+                        "packages": {
+                            "yum": {
+                                "httpd": [],
+                                "php": [],
+                                "php-mysql": []
+                            }
+                        },
+                        "files": {
+                            "/var/www/html/index.php": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "<html>\n",
+                                            "  <head>\n",
+                                            "    <title>AWS PHP Sample Application</title>\n",
+                                            "    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\">\n",
+                                            "  </head>\n",
+                                            "  <body>\n",
+                                            "    <h1>Welcome to AWS PHP Sample Application</h1>\n",
+                                            "    <p/>\n",
+                                            "    <?php\n",
+                                            "      // Print out the current data and tie\n",
+                                            "      print \"The Current Date and Time is: <br/>\";\n",
+                                            "      print date(\"g:i A l, F j Y.\");\n",
+                                            "      for($i = 0; $i < 10000000; $i++) {\n",
+                                            "      $a += $i;\n",
+                                            "      }\n",
+                                            "    ?>\n",
+                                            "    <p/>\n",
+                                            "    <h2>PHP Information</h2>\n",
+                                            "    <p/>\n",
+                                            "    <?php\n",
+                                            "      phpinfo();\n",
+                                            "    ?>\n",
+                                            "  </body>\n",
+                                            "</html>\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000777",
+                                "owner": "apache",
+                                "group": "apache"
+                            },
+                            "/etc/cfn/cfn-hup.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "[main]\n",
+                                            "stack=",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            "\n",
+                                            "region=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000400",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                                "content": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "[cfn-auto-reloader-hook]\n",
+                                            "triggers=post.update\n",
+                                            "path=Resources.EC2LaunchTemplate.Metadata.AWS::CloudFormation::Init\n",
+                                            "action=/opt/aws/bin/cfn-init -v ",
+                                            "         --stack ",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            },
+                                            "         --resource EC2LaunchTemplate ",
+                                            "         --region ",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n",
+                                            "runas=root\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000400",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "httpd": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true"
+                                },
+                                "cfn-hup": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true",
+                                    "files": [
+                                        "/etc/cfn/cfn-hup.conf",
+                                        "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "AWS::CloudFormation::Designer": {
+                    "id": "aff131b5-22de-48af-97c8-8453c3af213f"
+                }
+            },
+            "Properties": {
+                "LaunchTemplateName": {
+                    "Ref": "AWS::StackName"
+                },
+                "LaunchTemplateData": {
+                    "Monitoring": {
+                        "Enabled": "true"
+                    },
+                    "SecurityGroupIds": [
+                        {
+                            "Ref": "PublicAccessibleSecurityGroup"
+                        }
+                    ],
+                    "UserData": {
+                        "Fn::Base64": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "#!/bin/bash -xe\n",
+                                    "yum update -y aws-cfn-bootstrap\n",
+                                    "# Install the CodeDeploy agent\n",
+                                    "REGION=$(curl 169.254.169.254/latest/meta-data/placement/availability-zone/ | sed 's/[a-z]$//')\n",
+                                    "yum install ruby wget -y\n",
+                                    "cd /home/ec2-user\n",
+                                    "wget https://aws-codedeploy-$REGION.s3.amazonaws.com/latest/install\n",
+                                    "chmod +x ./install\n",
+                                    "./install auto\n",
+                                    "# Install the files and packages from the metadata\n",
+                                    "/opt/aws/bin/cfn-init -v ",
+                                    "         --stack ",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "         --resource EC2LaunchTemplate ",
+                                    "         --region ",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "\n",
+                                    "# Signal the status from cfn-init\n",
+                                    "/opt/aws/bin/cfn-signal -e $? ",
+                                    "         --stack ",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "         --resource AutoScalingGroup ",
+                                    "         --region ",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "\n"
+                                ]
+                            ]
+                        }
+                    },
+                    "IamInstanceProfile": {
+                        "Name": {
+                            "Ref": "InstanceRoleInstanceProfile"
+                        }
+                    },
+                    "KeyName": {
+                        "Ref": "EC2KeyName"
+                    },
+                    "ImageId": {
+                        "Fn::FindInMap": [
+                            "AWSRegionArch2AMI",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            {
+                                "Fn::FindInMap": [
+                                    "AWSInstanceType2Arch",
+                                    {
+                                        "Ref": "InstanceType"
+                                    },
+                                    "Arch"
+                                ]
+                            }
+                        ]
+                    },
+                    "InstanceType": {
+                        "Ref": "InstanceType"
+                    }
+                }
+            }
+        },
+        "PublicAccessibleSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Open access to the public.",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VpcId"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "c2d4b75e-3d99-49d3-b0a2-e1948d116557"
+                }
+            }
+        },
+        "DemoWebApp": {
+            "Type": "AWS::CodeCommit::Repository",
+            "Properties": {
+                "RepositoryName": "DemoWebApp",
+                "RepositoryDescription": "a sample web application"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "5e602028-821d-4f74-a0d0-85a971938d3d"
+                }
+            }
+        },
+        "CodeBuildTrustRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "1",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codebuild.amazonaws.com"
+                                ]
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6db988d6-9cba-4b0c-ab68-afa04aa5999b"
+                }
+            }
+        },
+        "CodeBuildPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CodeBuildPolicy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:logs:",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            ":",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":log-group:/aws/codebuild/DemoWebApp"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:logs:",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            ":",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":log-group:/aws/codebuild/DemoWebApp:*"
+                                        ]
+                                    ]
+                                }
+                            ],
+                            "Action": [
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::cicd-demo-",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "-",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::cicd-demo-",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "-",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                }
+                            ],
+                            "Action": [
+                                "s3:PutObject",
+                                "s3:GetObject",
+                                "s3:GetObjectVersion"
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "CodeBuildTrustRole"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "841e64f6-5ef8-49e5-94b4-ef0cbf74e1fc"
+                }
+            }
+        },
+        "CodeBuildProject": {
+            "Type": "AWS::CodeBuild::Project",
+            "Properties": {
+                "Name": "DemoWebApp",
+                "Description": "This is demo web app project",
+                "ServiceRole": {
+                    "Fn::GetAtt": [
+                        "CodeBuildTrustRole",
+                        "Arn"
+                    ]
+                },
+                "Artifacts": {
+                    "Type": "CODEPIPELINE"
+                },
+                "Environment": {
+                    "Type": "linuxContainer",
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "Image": "aws/codebuild/java:openjdk-8",
+                    "EnvironmentVariables": []
+                },
+                "Source": {
+                    "Type": "CODEPIPELINE"
+                },
+                "TimeoutInMinutes": 30,
+                "Tags": []
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "be8fead8-799a-4f25-a4c8-55c9dc809294"
+                }
+            }
+        },
+        "CodeDeployTrustRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codedeploy.amazonaws.com"
+                                ]
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+                ],
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "506733e8-ee23-4aa2-8691-68538f670658"
+                }
+            }
+        },
+        "MyApp": {
+            "Type": "AWS::CodeDeploy::Application",
+            "Properties": {
+                "ApplicationName": "DemoWebApp"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "d5ebefa5-fe01-445a-abd8-6ddd99500d22"
+                }
+            }
+        },
+        "ProdDeploymentGroup": {
+            "DependsOn": "CodeDeployTrustRole",
+            "Type": "AWS::CodeDeploy::DeploymentGroup",
+            "Properties": {
+                "ApplicationName": {
+                    "Ref": "MyApp"
+                },
+                "DeploymentGroupName": "DemoWebApp-master",
+                "DeploymentConfigName": "CodeDeployDefault.OneAtATime",
+                "AutoScalingGroups": [
+                    {
+                        "Ref": "AutoScalingGroup"
+                    }
+                ],
+                "ServiceRoleArn": {
+                    "Fn::GetAtt": [
+                        "CodeDeployTrustRole",
+                        "Arn"
+                    ]
+                },
+                "Ec2TagFilters": [
+                    {
+                        "Key": "EnvironmentType",
+                        "Value": "Production",
+                        "Type": "KEY_AND_VALUE"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "b9058f17-765a-4dfa-8229-65d27435fb73"
+                }
+            }
+        },
+        "CodePipelineTrustRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "1",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codepipeline.amazonaws.com"
+                                ]
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "293c0fdc-ae12-438f-88fa-08a9f0ac3eab"
+                }
+            }
+        },
+        "CodePipelineRolePolicies": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CodePipelinePolicy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Resource": [
+                                "*"
+                            ],
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Action": [
+                                "s3:PutBucketPolicy",
+                                "s3:PutObject"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::cicd-demo-",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "-",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            }
+                                        ]
+                                    ]
+                                }
+                            ],
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Action": [
+                                "codecommit:GetBranch",
+                                "codecommit:GetCommit",
+                                "codecommit:UploadArchive",
+                                "codecommit:GetUploadArchiveStatus",
+                                "codecommit:CancelUploadArchive"
+                            ],
+                            "Resource": "*",
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Action": [
+                                "codepipeline:*",
+                                "iam:ListRoles",
+                                "iam:PassRole",
+                                "codedeploy:CreateDeployment",
+                                "codedeploy:GetApplicationRevision",
+                                "codedeploy:GetDeployment",
+                                "codedeploy:GetDeploymentConfig",
+                                "codedeploy:RegisterApplicationRevision",
+                                "elasticbeanstalk:DescribeApplications",
+                                "elasticbeanstalk:DescribeEnvironments",
+                                "lambda:GetFunctionConfiguration",
+                                "lambda:ListFunctions"
+                            ],
+                            "Resource": "*",
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Action": [
+                                "codebuild:StartBuild",
+                                "codebuild:StopBuild",
+                                "codebuild:BatchGet*",
+                                "codebuild:Get*",
+                                "codebuild:List*",
+                                "codecommit:GetBranch",
+                                "codecommit:GetCommit",
+                                "codecommit:GetRepository",
+                                "codecommit:ListBranches",
+                                "s3:GetBucketLocation",
+                                "s3:ListAllMyBuckets"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*"
+                        },
+                        {
+                            "Action": [
+                                "logs:GetLogEvents"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "arn:aws:logs:*:*:log-group:/aws/codebuild/*:log-stream:*"
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "CodePipelineTrustRole"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "21a8388c-e16e-4a1e-b3d8-e07f9023f62e"
+                }
+            }
+        },
+        "MasterPipeline": {
+            "Type": "AWS::CodePipeline::Pipeline",
+            "DependsOn": [
+                "S3Bucket"
+            ],
+            "Properties": {
+                "Name": "DemoWebApp-master",
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "CodePipelineTrustRole",
+                        "Arn"
+                    ]
+                },
+                "Stages": [
+                    {
+                        "Name": "Source",
+                        "Actions": [
+                            {
+                                "Name": "ApplicationSource",
+                                "InputArtifacts": [],
+                                "ActionTypeId": {
+                                    "Version": "1",
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeCommit"
+                                },
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "DemoWebApp-SourceArtifact"
+                                    }
+                                ],
+                                "Configuration": {
+                                    "RepositoryName": "DemoWebApp",
+                                    "BranchName": {
+                                        "Ref": "MainBranchName"
+                                    },
+                                    "PollForSourceChanges": false
+                                },
+                                "RunOrder": 1
+                            }
+                        ]
+                    },
+                    {
+                        "Name": "Build",
+                        "Actions": [
+                            {
+                                "Name": "ApplicationBuild",
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "DemoWebApp-SourceArtifact"
+                                    }
+                                ],
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Version": "1",
+                                    "Provider": "CodeBuild"
+                                },
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "DemoWebApp-BuiltArtifact"
+                                    }
+                                ],
+                                "Configuration": {
+                                    "ProjectName": "DemoWebApp"
+                                },
+                                "RunOrder": 1
+                            }
+                        ]
+                    },
+                    {
+                        "Name": "MasterDeploy",
+                        "Actions": [
+                            {
+                                "Name": "MasterDeploy",
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "DemoWebApp-BuiltArtifact"
+                                    }
+                                ],
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Version": "1",
+                                    "Provider": "CodeDeploy"
+                                },
+                                "Configuration": {
+                                    "ApplicationName": {
+                                        "Ref": "MyApp"
+                                    },
+                                    "DeploymentGroupName": {
+                                        "Ref": "ProdDeploymentGroup"
+                                    }
+                                },
+                                "RunOrder": 1
+                            }
+                        ]
+                    }
+                ],
+                "ArtifactStore": {
+                    "Type": "S3",
+                    "Location": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "cicd-demo-",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "-",
+                                {
+                                    "Ref": "AWS::AccountId"
+                                }
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "410f3ec2-9ab8-4485-93ba-5a6a6bf40ab5"
+                }
+            }
+        },
+        "AmazonCloudWatchEventRoleMasterPipeline": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "events.amazonaws.com"
+                                ]
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "cwe-pipeline-execution",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "codepipeline:StartPipelineExecution",
+                                    "Resource": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                "arn:aws:codepipeline:",
+                                                {
+                                                    "Ref": "AWS::Region"
+                                                },
+                                                ":",
+                                                {
+                                                    "Ref": "AWS::AccountId"
+                                                },
+                                                ":DemoWebApp-master"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "333b065d-54c4-449c-895a-1ab69d6da001"
+                }
+            }
+        },
+        "AmazonCloudWatchEventRuleMasterPipeline": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "EventPattern": {
+                    "source": [
+                        "aws.codecommit"
+                    ],
+                    "detail-type": [
+                        "CodeCommit Repository State Change"
+                    ],
+                    "resources": [
+                        {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:aws:codecommit:",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    ":",
+                                    {
+                                        "Ref": "AWS::AccountId"
+                                    },
+                                    ":DemoWebApp"
+                                ]
+                            ]
+                        }
+                    ],
+                    "detail": {
+                        "event": [
+                            "referenceCreated",
+                            "referenceUpdated"
+                        ],
+                        "referenceType": [
+                            "branch"
+                        ],
+                        "referenceName": [
+                            {
+                                "Ref": "MainBranchName"
+                            }
+                        ]
+                    }
+                },
+                "Targets": [
+                    {
+                        "Arn": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:aws:codepipeline:",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    ":",
+                                    {
+                                        "Ref": "AWS::AccountId"
+                                    },
+                                    ":DemoWebApp-master"
+                                ]
+                            ]
+                        },
+                        "RoleArn": {
+                            "Fn::GetAtt": [
+                                "AmazonCloudWatchEventRoleMasterPipeline",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "codepipeline-AppPipeline"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "475dc862-9b7b-4e76-891f-41d703492005"
+                }
+            }
+        },
+        "S3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "cicd-demo-",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "-",
+                            {
+                                "Ref": "AWS::AccountId"
+                            }
+                        ]
+                    ]
+                },
+                "VersioningConfiguration": {
+                    "Status": "Enabled"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "CICDWorkshop-S3Bucket"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "2df16a8b-39b7-4f82-b675-f50f1a6d8d90"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "WebsiteURL": {
+            "Description": "URL for newly created web application stack",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "ApplicationLoadBalancer",
+                                "DNSName"
+                            ]
+                        }
+                    ]
+                ]
+            }
+        },
+        "AutoScalingGroupName": {
+            "Description": "Auto Scaling Group Name",
+            "Value": {
+                "Ref": "AutoScalingGroup"
+            }
+        },
+        "ApplicationLoadBalancer": {
+            "Description": "ApplicationLoadBalancer Name",
+            "Value": {
+                "Ref": "ApplicationLoadBalancer"
+            }
+        },
+        "Cloud9URL": {
+            "Description": "Cloud9 Environment",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        {
+                            "Fn::Sub": "https://${AWS::Region}.console.aws.amazon.com/cloud9/ide/"
+                        },
+                        {
+                            "Ref": "C9IDE"
+                        }
+                    ]
+                ]
+            }
+        }
+    },
+    "Metadata": {
+        "AWS::CloudFormation::Designer": {
+            "2df16a8b-39b7-4f82-b675-f50f1a6d8d90": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -220,
+                    "y": 750
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "333b065d-54c4-449c-895a-1ab69d6da001": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 400,
+                    "y": 250
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "475dc862-9b7b-4e76-891f-41d703492005": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 250
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "293c0fdc-ae12-438f-88fa-08a9f0ac3eab": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -320,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "21a8388c-e16e-4a1e-b3d8-e07f9023f62e": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -420,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "293c0fdc-ae12-438f-88fa-08a9f0ac3eab"
+                ]
+            },
+            "d5ebefa5-fe01-445a-abd8-6ddd99500d22": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -220,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "506733e8-ee23-4aa2-8691-68538f670658": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -120,
+                    "y": 350
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "b9058f17-765a-4dfa-8229-65d27435fb73": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -120,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "d5ebefa5-fe01-445a-abd8-6ddd99500d22",
+                    "4faed0ff-e61c-4bca-ac76-b21c573d0784"
+                ]
+            },
+            "410f3ec2-9ab8-4485-93ba-5a6a6bf40ab5": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -220,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": [],
+                "dependson": [
+                    "2df16a8b-39b7-4f82-b675-f50f1a6d8d90"
+                ]
+            },
+            "6db988d6-9cba-4b0c-ab68-afa04aa5999b": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -320,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "be8fead8-799a-4f25-a4c8-55c9dc809294": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -320,
+                    "y": 550
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "841e64f6-5ef8-49e5-94b4-ef0cbf74e1fc": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -320,
+                    "y": 350
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "6db988d6-9cba-4b0c-ab68-afa04aa5999b"
+                ]
+            },
+            "5e602028-821d-4f74-a0d0-85a971938d3d": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -420,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "c2d4b75e-3d99-49d3-b0a2-e1948d116557": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 400,
+                    "y": 550
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "9c0caff7-b227-4ab5-a951-7cda4ccc40aa": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 400,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "ef1902eb-5eaf-4e74-8b92-e1c08c5139bc": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 500,
+                    "y": 550
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "c2d4b75e-3d99-49d3-b0a2-e1948d116557"
+                ]
+            },
+            "099c9417-dcb7-48a2-9c59-59339fd88400": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 500,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "ef1902eb-5eaf-4e74-8b92-e1c08c5139bc"
+                ]
+            },
+            "51fd3dc7-fca4-415b-bd90-6f70dec32cae": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 400,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "7e84d283-7eae-4feb-9bb6-5b58d561b2d4": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "51fd3dc7-fca4-415b-bd90-6f70dec32cae"
+                ]
+            },
+            "aff131b5-22de-48af-97c8-8453c3af213f": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 550
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "4faed0ff-e61c-4bca-ac76-b21c573d0784": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "9c0caff7-b227-4ab5-a951-7cda4ccc40aa"
+                ]
+            },
+            "68222c2f-a30e-49e2-b922-7ffce26d6339": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 350
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "4faed0ff-e61c-4bca-ac76-b21c573d0784"
+                ]
+            },
+            "deab916c-02b3-4e7c-aa23-e27364fec20a": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 500,
+                    "y": 650
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "51fd3dc7-fca4-415b-bd90-6f70dec32cae"
+                ]
+            },
+            "06a6059b-2eae-45ae-af98-82485e728951": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -520,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": []
+            }
+        }
+    }
+}
